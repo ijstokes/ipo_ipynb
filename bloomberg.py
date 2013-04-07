@@ -23,6 +23,68 @@ def parseCmdLine():
 
     return options
 
+def procfromtxt(data_str):
+    """ does the best possible job of converting from the string format results to a dictionary
+
+        securityData : {
+            security : "SPLK US Equity"
+            eidData : {
+            },
+            fieldExceptions : {
+            },
+            sequenceNumber : 9
+            fieldData : {
+                EQY_PO_LEAD_MGR : "MS,BAML,CS,JPM"
+                INDUSTRY_SECTOR : "Communications"
+                INDUSTRY_GROUP : "Internet"
+            },
+        },
+
+"EVAC": {
+            "eidData" : {
+            },
+            "fieldExceptions" : {
+            },
+            "sequenceNumber" : 39,
+            "fieldData" : {
+                "INDUSTRY_SECTOR" : "Industrial",
+                "INDUSTRY_GROUP" : "Machinery-Diversified",
+                "INDUSTRY_SUBGROUP" : "Machinery-General Indust",
+                "MARKET_SECTOR" : 2,
+                "EQY_FUND_IND" : "Industrial",
+            },
+        },
+
+"""
+    results = []
+    for line in data_str.split("\n"):
+        parts = line.strip().split()
+        if line.startswith("        securityData : {"):
+            continue
+        elif line.startswith('            fieldData : {'):
+            continue
+        elif line.startswith('            fieldExceptions : {'):
+            continue
+        elif line.startswith('            eidData : {'):
+            continue
+        elif line.startswith('            security : "'):
+            line = line.replace('            security : ', '').replace(' US Equity','').strip() + ": {"
+        elif line.startswith('            sequenceNumber :'):
+            continue # I don't think we need this at all
+            #line = line.strip().split()[-1] + ","
+            line = line + ","
+        elif line.endswith('"'):
+            line = '                "%s" : %s,' % (parts[0], " ".join(parts[2:]))
+        elif line.endswith('{'):
+            line = '                "%s" : {' % (parts[0])
+        elif len(parts) == 3:
+            line = '                "%s" : %s,' % (parts[0], parts[2])
+        elif line.startswith('        },'):
+            pass # leave the line as it is
+        else:
+            continue
+        results.append(line)
+    return "\n".join(results)
 
 def query(tickers=[], fields=[]):
     global options
@@ -67,10 +129,9 @@ def query(tickers=[], fields=[]):
         while(True):
             # We provide timeout to give the chance to Ctrl+C handling:
             ev = session.nextEvent(500)
-            results.append(ev)
             for msg in ev:
                 serial = msg.toString().replace("=",":").replace("}","},").replace("[]","")
-                print serial
+                results.append(serial)
             # Response completly received, so we could exit
             if ev.eventType() == blpapi.Event.RESPONSE:
                 break
@@ -94,8 +155,24 @@ if __name__ == "__main__":
                     ticksyms.append(parts[1])
                 except:
                     print "ERROR on line [%s]" % line
-        
-        query(ticksyms, ["EQY_PO_LEAD_MGR", "INDUSTRY_SECTOR", "INDUSTRY_GROUP", "INDUSTRY_SUBGROUP", "MARKET_SECTOR", "EQY_FUND_IND"])
+        results = query(ticksyms, """
+EQY_PO_LEAD_MGR
+INDUSTRY_SECTOR
+INDUSTRY_GROUP
+INDUSTRY_SUBGROUP
+MARKET_SECTOR
+EQY_FUND_IND
+EQY_INST_SH_HELD
+EQY_INST_SELLS
+EQY_INST_HOLD
+EQY_INST_BUYS
+EQY_SH_PURCH_SOLD
+EQY_INIT_PO_SH_OFFER
+EQY_PO_SH_PX
+""".split())
+        with open('results.py','w') as output_fh:
+            for result in results:
+                output_fh.write(procfromtxt(result))
     except KeyboardInterrupt:
         print "Ctrl+C pressed. Stopping..."
 
